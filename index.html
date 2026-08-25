@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chama Ledger System - Complete Offline App</title>
+  
+  <!-- PWA Manifest & Mobile Meta Tags -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Chama Ledger">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <!-- Dexie.js (IndexedDB Wrapper) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dexie/3.2.4/dexie.min.js"></script>
+  <!-- Tesseract.js (In-Browser OCR Engine) -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <!-- SheetJS (Excel .xlsx / .xls / .csv Parser) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-900 p-4 md:p-8">
+
+  <div class="max-w-7xl mx-auto space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200 gap-4">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-800">Chama Ledger System</h1>
+        <p class="text-sm text-slate-500">Offline PWA app, adjustable member start dates, group withdrawals, WhatsApp receipts, and financial reporting.</p>
+      </div>
+      <div id="statusBadge" class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+        ● Online
+      </div>
+    </div>
+
+    <!-- Group Summary Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <p class="text-[10px] font-semibold text-slate-500 uppercase">Regular Shares</p>
+        <p id="totalRegular" class="text-lg font-bold text-slate-800 mt-1">KES 0</p>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <p class="text-[10px] font-semibold text-slate-500 uppercase">Additional Paid</p>
+        <p id="totalAdditional" class="text-lg font-bold text-blue-600 mt-1">KES 0</p>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <p class="text-[10px] font-semibold text-slate-500 uppercase">Group Withdrawals</p>
+        <p id="totalWithdrawals" class="text-lg font-bold text-amber-600 mt-1">KES 0</p>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <p class="text-[10px] font-semibold text-slate-500 uppercase">Net Vault Cash</p>
+        <p id="netVault" class="text-lg font-bold text-emerald-600 mt-1">KES 0</p>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <p class="text-[10px] font-semibold text-slate-500 uppercase">Group Arrears</p>
+        <p id="totalArrears" class="text-lg font-bold text-rose-600 mt-1">KES 0</p>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <p class="text-[10px] font-semibold text-slate-500 uppercase">Group Surplus</p>
+        <p id="totalSurplus" class="text-lg font-bold text-indigo-600 mt-1">KES 0</p>
+      </div>
+    </div>
+
+    <!-- INDIVIDUAL MEMBER CONTRIBUTIONS DASHBOARD GRID -->
+    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-3 gap-2">
+        <div>
+          <h2 class="text-lg font-bold text-slate-800">Individual Member Contributions Dashboard</h2>
+          <p class="text-xs text-slate-500">Real-time member contribution totals, editable start dates, arrears, and WhatsApp receipts.</p>
+        </div>
+        <span id="memberCountBadge" class="bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 py-1 rounded-full border border-slate-200">
+          0 Members Active
+        </span>
+      </div>
+
+      <div id="memberCardsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Cards loaded dynamically -->
+      </div>
+    </div>
+
+    <!-- Smart OCR & Text Parser Banner -->
+    <div class="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-6 rounded-xl shadow-sm space-y-4">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+        <div>
+          <h2 class="text-lg font-bold">Smart Receipt & Text Extractor</h2>
+          <p class="text-xs text-slate-300">Upload receipt images or paste SMS notifications to auto-extract details into the entry list.</p>
+        </div>
+        <div id="ocrProgress" class="hidden text-xs bg-slate-700 px-3 py-1.5 rounded-lg text-emerald-400 font-mono">
+          Processing OCR... 0%
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Upload Receipt Image</label>
+          <input type="file" id="receiptImageInput" accept="image/*" class="w-full text-xs text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 cursor-pointer">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Paste Raw SMS / Payment Text</label>
+          <div class="flex gap-2">
+            <input type="text" id="rawTextInput" placeholder="e.g. Confirmed KES 5,000 sent on 2026-08-24 by John Doe Ref ABC123" class="w-full px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white outline-none focus:ring-1 focus:ring-emerald-500">
+            <button id="parseTextBtn" type="button" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition cursor-pointer">Extract</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Layout Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      
+      <!-- Member Setup & Backup Controls Column -->
+      <div class="space-y-6">
+        <!-- Add Member Form -->
+        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <h2 class="text-lg font-bold text-slate-800 mb-4">Add Member</h2>
+          <form id="memberForm" class="space-y-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Full Name</label>
+              <input type="text" id="memberName" required placeholder="e.g. John Doe" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-slate-800 outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Monthly Target (KES)</label>
+              <input type="number" id="memberRate" required value="5000" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-slate-800 outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Member Start Date</label>
+              <input type="date" id="memberStartDate" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-slate-800 outline-none">
+            </div>
+            <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium py-2 rounded-lg text-sm transition cursor-pointer">Register Member</button>
+          </form>
+        </div>
+
+        <!-- Group Withdrawal Form -->
+        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+          <h2 class="text-lg font-bold text-slate-800">Record Group Withdrawal</h2>
+          <form id="groupWithdrawalForm" class="space-y-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Withdrawal Date</label>
+              <input type="date" id="groupWithdrawDate" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-amber-50 font-semibold outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Amount (KES)</label>
+              <input type="number" id="groupWithdrawAmount" required placeholder="e.g. 50000" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Purpose / Notes</label>
+              <input type="text" id="groupWithdrawNotes" required placeholder="e.g. Land Deposit, Bank Fee, Investment" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-none">
+            </div>
+            <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-2 rounded-lg text-xs transition cursor-pointer">
+              Record Group Expense / Outflow
+            </button>
+          </form>
+        </div>
+
+        <!-- Excel & JSON Import/Export Box -->
+        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-3">
+          <h3 class="font-bold text-slate-800 text-sm">Excel & JSON Backup / Upload</h3>
+          <p class="text-xs text-slate-500 leading-relaxed">Upload an Excel sheet (.xlsx/.csv) or JSON file to bulk-import members & transactions.</p>
+          
+          <div class="space-y-2 pt-2">
+            <label class="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-2.5 rounded-lg font-semibold transition text-center cursor-pointer block shadow-sm">
+              📊 Upload Excel / CSV File (.xlsx / .csv)
+              <input type="file" id="importExcelInput" accept=".xlsx, .xls, .csv" class="hidden">
+            </label>
+
+            <button id="exportJsonBtn" type="button" class="w-full bg-slate-800 hover:bg-slate-900 text-white text-xs py-2.5 rounded-lg font-semibold transition cursor-pointer flex items-center justify-center gap-1">
+              📥 Download Complete JSON Backup
+            </button>
+            <label class="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs py-2.5 rounded-lg font-semibold transition text-center cursor-pointer block border border-slate-300">
+              📤 Restore Database from JSON
+              <input type="file" id="importJsonInput" accept=".json" class="hidden">
+            </label>
+          </div>
+          
+          <div class="pt-2">
+            <button id="clearDbBtn" type="button" class="text-xs text-rose-600 font-semibold underline cursor-pointer">Clear All Local Data</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Batch Transaction Entry Form -->
+      <div class="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-3 gap-2">
+          <div>
+            <h2 class="text-lg font-bold text-slate-800">Record Member Contributions (Same-Day Batch)</h2>
+            <p class="text-xs text-slate-500">Record member contributions occurring on the same date.</p>
+          </div>
+          <button id="addRowBtn" type="button" class="bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs px-3 py-2 rounded-lg font-bold transition flex items-center gap-1 cursor-pointer">
+            + Add Another Entry Row
+          </button>
+        </div>
+
+        <form id="batchTransactionForm" class="space-y-4">
+          <div class="max-w-xs">
+            <label class="block text-xs font-medium text-slate-600 mb-1">Transaction Date (Applies to all rows below)</label>
+            <input type="date" id="batchTxDate" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-slate-800 outline-none bg-amber-50 font-semibold">
+          </div>
+
+          <div id="batchRowsContainer" class="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+            <!-- Dynamic rows -->
+          </div>
+
+          <div class="flex justify-end pt-2 border-t border-slate-100">
+            <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-2.5 rounded-lg text-sm transition shadow-sm cursor-pointer">
+              Save Member Contributions
+            </button>
+          </div>
+        </form>
+      </div>
+
+    </div>
+
+    <!-- Report Generator Section -->
+    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 class="text-lg font-bold text-slate-800">Generate Contributions & Audit Report</h2>
+          <p class="text-xs text-slate-500">Filter contribution statements by individual member, group withdrawals, or date range</p>
+        </div>
+        <div class="flex gap-2">
+          <button id="exportCsvBtn" type="button" class="bg-slate-800 hover:bg-slate-900 text-white text-xs px-3 py-2 rounded-lg font-semibold transition cursor-pointer">Export to Excel (CSV)</button>
+          <button id="printReportBtn" type="button" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-2 rounded-lg font-semibold transition cursor-pointer">Print / Save PDF</button>
+        </div>
+      </div>
+
+      <!-- Report Filters -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Report Scope</label>
+          <select id="reportMemberFilter" class="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white outline-none">
+            <option value="ALL">All Transactions Statement</option>
+            <option value="GROUP_WITHDRAWAL">Group Withdrawals Only</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Start Date Filter</label>
+          <input type="date" id="reportStartDate" class="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">End Date Filter</label>
+          <input type="date" id="reportEndDate" class="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white outline-none">
+        </div>
+      </div>
+
+      <!-- Generated Report Output Table -->
+      <div id="printableReportArea" class="overflow-x-auto">
+        <div class="text-center py-2 hidden" id="reportPrintHeader">
+          <h1 class="text-xl font-bold">Chama Financial & Contributions Statement</h1>
+          <p id="reportPrintSub" class="text-xs text-slate-500"></p>
+          <hr class="my-3">
+        </div>
+        <table class="w-full text-left text-sm border-collapse">
+          <thead class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+            <tr>
+              <th class="p-3">Tx Date</th>
+              <th class="p-3">Entity / Member</th>
+              <th class="p-3">Category</th>
+              <th class="p-3">Amount</th>
+              <th class="p-3">Reference / Notes</th>
+              <th class="p-3 text-center">Action</th>
+            </tr>
+          </thead>
+          <tbody id="reportTableBody" class="divide-y divide-slate-100 text-xs">
+            <!-- Filtered rows -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Master Member Ledger Table -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="p-6 border-b border-slate-100 flex justify-between items-center">
+        <h2 class="text-lg font-bold text-slate-800">Master Member Ledger Table</h2>
+        <span class="text-xs text-slate-400">Click Settings to modify Member Start Dates</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-slate-50 text-slate-600 font-medium border-b border-slate-200">
+            <tr>
+              <th class="p-4">Member</th>
+              <th class="p-4">Start Date</th>
+              <th class="p-4">Total Paid</th>
+              <th class="p-4">Months Covered</th>
+              <th class="p-4">Arrears</th>
+              <th class="p-4">Surplus (Advance)</th>
+              <th class="p-4 text-center">Manage</th>
+            </tr>
+          </thead>
+          <tbody id="ledgerTable" class="divide-y divide-slate-100">
+            <!-- Master rows -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- EDIT MEMBER SETTINGS MODAL -->
+  <div id="editMemberModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-white rounded-xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h3 class="font-bold text-slate-800 text-base">Adjust Member Settings</h3>
+        <button id="closeModalBtn" type="button" class="text-slate-400 hover:text-slate-600 text-lg font-bold cursor-pointer">✕</button>
+      </div>
+
+      <form id="editMemberForm" class="space-y-4">
+        <input type="hidden" id="editMemberId">
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Full Name</label>
+          <input type="text" id="editMemberName" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-slate-800 outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Member Start Date</label>
+          <input type="date" id="editMemberStartDate" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-slate-800 outline-none bg-amber-50">
+          <p class="text-[11px] text-slate-500 mt-1">Adjusting this date alters the total active months and recalculates arrears/surplus.</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Monthly Target (KES)</label>
+          <input type="number" id="editMemberRate" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-slate-800 outline-none">
+        </div>
+
+        <div class="flex justify-between items-center pt-3 border-t border-slate-100 gap-2">
+          <button type="button" id="deleteMemberBtn" class="text-rose-600 hover:text-rose-800 text-xs font-bold underline cursor-pointer">
+            Delete Member
+          </button>
+          <div class="flex gap-2">
+            <button type="button" id="cancelModalBtn" class="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50 cursor-pointer">Cancel</button>
+            <button type="submit" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold cursor-pointer">Save Changes</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // Register Service Worker for PWA Installation
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('PWA Service Worker registered.', reg.scope))
+          .catch(err => console.log('Service Worker failed:', err));
+      });
+    }
+
+    const db = new Dexie('ChamaGroupWithdrawDB');
+    db.version(1).stores({
+      members: '++id, name, monthly_rate, start_date',
+      transactions: '++id, member_id, category, amount, notes, date'
+    });
+
+    if (navigator.storage && navigator.storage.persist) {
+      navigator.storage.persist().then(granted => {
+        if (granted) console.log("IndexedDB persistent storage active.");
+      });
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    document.getElementById('memberStartDate').value = todayStr;
+    document.getElementById('batchTxDate').value = todayStr;
+    document.getElementById('groupWithdrawDate').value = todayStr;
+
+    const statusBadge = document.getElementById('statusBadge');
+    const memberForm = document.getElementById('memberForm');
+    const groupWithdrawalForm = document.getElementById('groupWithdrawalForm');
+    const batchTransactionForm = document.getElementById('batchTransactionForm');
+    const batchRowsContainer = document.getElementById('batchRowsContainer');
+    const addRowBtn = document.getElementById('addRowBtn');
+    const ledgerTable = document.getElementById('ledgerTable');
+    const memberCardsGrid = document.getElementById('memberCardsGrid');
+    const memberCountBadge = document.getElementById('memberCountBadge');
+    const ocrProgress = document.getElementById('ocrProgress');
+
+    const reportMemberFilter = document.getElementById('reportMemberFilter');
+    const reportStartDate = document.getElementById('reportStartDate');
+    const reportEndDate = document.getElementById('reportEndDate');
+    const reportTableBody = document.getElementById('reportTableBody');
+
+    // Modal elements
+    const editMemberModal = document.getElementById('editMemberModal');
+    const editMemberForm = document.getElementById('editMemberForm');
+    const editMemberId = document.getElementById('editMemberId');
+    const editMemberName = document.getElementById('editMemberName');
+    const editMemberStartDate = document.getElementById('editMemberStartDate');
+    const editMemberRate = document.getElementById('editMemberRate');
+
+    function checkConnection() {
+      if (navigator.onLine) {
+        statusBadge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800";
+        statusBadge.textContent = "● Online";
+      } else {
+        statusBadge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800";
+        statusBadge.textContent = "● Offline Mode Active";
+      }
+    }
+    window.addEventListener('online', checkConnection);
+    window.addEventListener('offline', checkConnection);
+    checkConnection();
+
+    function calculateMonthsElapsed(startDateStr) {
+      const start = new Date(startDateStr);
+      const now = new Date();
+      let months = (now.getFullYear() - start.getFullYear()) * 12;
+      months -= start.getMonth();
+      months += now.getMonth();
+      return Math.max(1, months + 1);
+    }
+
+    function createBatchRowElement(members) {
+      const div = document.createElement('div');
+      div.className = 'batch-row grid grid-cols-1 sm:grid-cols-12 gap-2 p-3 bg-slate-50 rounded-lg border border-slate-200 items-end';
+      
+      let optionsHTML = '<option value="">-- Select Member --</option>';
+      members.forEach(m => {
+        optionsHTML += `<option value="${m.id}">${m.name}</option>`;
+      });
+
+      div.innerHTML = `
+        <div class="sm:col-span-5">
+          <label class="block text-[10px] font-medium text-slate-500 mb-1">Member</label>
+          <select class="txMemberSelect w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs bg-white outline-none" required>
+            ${optionsHTML}
+          </select>
+        </div>
+        <div class="sm:col-span-3">
+          <label class="block text-[10px] font-medium text-slate-500 mb-1">Category</label>
+          <select class="txCategorySelect w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs bg-white outline-none">
+            <option value="REGULAR">Regular Share</option>
+            <option value="ADDITIONAL">Additional / Extra</option>
+          </select>
+        </div>
+        <div class="sm:col-span-3">
+          <label class="block text-[10px] font-medium text-slate-500 mb-1">Amount (KES)</label>
+          <input type="number" class="txAmountInput w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs bg-white outline-none" required placeholder="5000">
+        </div>
+        <div class="sm:col-span-1 text-center">
+          <button type="button" class="removeRowBtn text-rose-500 hover:text-rose-700 text-xs font-bold py-1 px-2 cursor-pointer">✕</button>
+        </div>
+      `;
+
+      div.querySelector('.removeRowBtn').addEventListener('click', () => {
+        if (document.querySelectorAll('.batch-row').length > 1) {
+          div.remove();
+        } else {
+          alert("At least one entry row must remain.");
+        }
+      });
+
+      return div;
+    }
+
+    addRowBtn.addEventListener('click', async () => {
+      const members = await db.members.toArray();
+      batchRowsContainer.appendChild(createBatchRowElement(members));
+    });
+
+    // Helper: Generate formatted WhatsApp receipt link
+    window.sendWhatsAppReceipt = async function(memberId, txId = null) {
+      const member = await db.members.get(Number(memberId));
+      if (!member) return alert("Member details not found.");
+
+      const allMemberTxs = await db.transactions.where('member_id').equals(member.id).toArray();
+      const regPaid = allMemberTxs.filter(t => t.category === 'REGULAR').reduce((s, t) => s + Number(t.amount), 0);
+      const addPaid = allMemberTxs.filter(t => t.category === 'ADDITIONAL').reduce((s, t) => s + Number(t.amount), 0);
+      const totalPaid = regPaid + addPaid;
+
+      const activeMonths = calculateMonthsElapsed(member.start_date);
+      const expectedTotal = activeMonths * member.monthly_rate;
+      const monthsCovered = Math.floor(totalPaid / member.monthly_rate);
+      const balanceDelta = totalPaid - expectedTotal;
+      const arrears = balanceDelta < 0 ? Math.abs(balanceDelta) : 0;
+      const surplus = balanceDelta > 0 ? balanceDelta : 0;
+
+      let txInfoText = "";
+      if (txId) {
+        const tx = await db.transactions.get(Number(txId));
+        if (tx) {
+          txInfoText = `*Payment Received:* KES ${Number(tx.amount).toLocaleString()}\n*Category:* ${tx.category}\n*Date:* ${tx.date}\n-----------------------------\n`;
+        }
+      }
+
+      let positionText = arrears > 0 
+        ? `⚠️ *Current Arrears:* KES ${arrears.toLocaleString()}` 
+        : (surplus > 0 ? `🎉 *Advance Surplus:* KES ${surplus.toLocaleString()}` : `✅ *Status:* Up to Date`);
+
+      const message = `*CHAMA PAYMENT RECEIPT*\n` +
+        `-----------------------------\n` +
+        `*Member:* ${member.name}\n` +
+        txInfoText +
+        `*Total Contributed:* KES ${totalPaid.toLocaleString()}\n` +
+        `*Months Covered:* ${monthsCovered} / ${activeMonths} Month(s)\n` +
+        positionText + `\n` +
+        `-----------------------------\n` +
+        `Thank you for your continuous support! 🙏`;
+
+      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+      window.open(whatsappUrl, '_blank');
+    };
+
+    // MEMBER SETTINGS MODAL HANDLERS
+    window.openEditMemberModal = async function(memberId) {
+      const member = await db.members.get(Number(memberId));
+      if (!member) return;
+
+      editMemberId.value = member.id;
+      editMemberName.value = member.name;
+      editMemberStartDate.value = member.start_date;
+      editMemberRate.value = member.monthly_rate;
+
+      editMemberModal.classList.remove('hidden');
+    };
+
+    function closeModal() {
+      editMemberModal.classList.add('hidden');
+    }
+
+    document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+    document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+
+    editMemberForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = Number(editMemberId.value);
+      const name = editMemberName.value.trim();
+      const start_date = editMemberStartDate.value;
+      const monthly_rate = Number(editMemberRate.value);
+
+      if (id && name && start_date) {
+        await db.members.update(id, { name, start_date, monthly_rate });
+        closeModal();
+        refreshDashboard();
+      }
+    });
+
+    document.getElementById('deleteMemberBtn').addEventListener('click', async () => {
+      const id = Number(editMemberId.value);
+      if (!id) return;
+
+      if (confirm("Are you sure you want to delete this member? Their transaction history will remain in the database logs.")) {
+        await db.members.delete(id);
+        closeModal();
+        refreshDashboard();
+      }
+    });
+
+    async function extractAndAutoFillData(text) {
+      const members = await db.members.toArray();
+      let extractedAmount = null;
+      const amountMatch = text.match(/(?:KES|Ksh|\$)\s*([\d,]+(?:\.\d{2})?)/i) || text.match(/paid\s*([\d,]+)/i);
+      if (amountMatch) extractedAmount = parseFloat(amountMatch[1].replace(/,/g, ''));
+
+      let extractedDate = null;
+      const dateMatch = text.match(/\b(\d{4}-\d{2}-\d{2})\b/) || text.match(/\b(\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{2,4})\b/);
+      if (dateMatch) {
+        const parsed = new Date(dateMatch[1]);
+        if (!isNaN(parsed.getTime())) extractedDate = parsed.toISOString().split('T')[0];
+      }
+
+      let matchedMemberId = "";
+      for (const m of members) {
+        if (text.toLowerCase().includes(m.name.toLowerCase())) {
+          matchedMemberId = m.id;
+          break;
+        }
+      }
+
+      if (extractedDate) document.getElementById('batchTxDate').value = extractedDate;
+
+      const firstRow = document.querySelector('.batch-row');
+      if (firstRow) {
+        if (extractedAmount) firstRow.querySelector('.txAmountInput').value = extractedAmount;
+        if (matchedMemberId) firstRow.querySelector('.txMemberSelect').value = String(matchedMemberId);
+      }
+
+      alert(`Extracted Data:\n• Amount: ${extractedAmount ? 'KES ' + extractedAmount : 'Not found'}\n• Date: ${extractedDate || 'Today'}\n• Member: ${matchedMemberId ? 'Matched' : 'Manual Select'}`);
+    }
+
+    document.getElementById('receiptImageInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      ocrProgress.classList.remove('hidden');
+      ocrProgress.textContent = "Scanning Image...";
+      try {
+        const worker = await Tesseract.createWorker('eng');
+        const ret = await worker.recognize(file);
+        ocrProgress.classList.add('hidden');
+        await worker.terminate();
+        extractAndAutoFillData(ret.data.text);
+      } catch (err) {
+        ocrProgress.classList.add('hidden');
+        alert("OCR Scanning failed.");
+      }
+    });
+
+    document.getElementById('parseTextBtn').addEventListener('click', () => {
+      const rawText = document.getElementById('rawTextInput').value;
+      if (rawText) extractAndAutoFillData(rawText);
+    });
+
+    // FLEXIBLE EXCEL / CSV UPLOAD ENGINE
+    document.getElementById('importExcelInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      if (typeof XLSX === 'undefined') {
+        alert("Excel parser library is still loading. Refresh page while connected online.");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const data = new Uint8Array(event.target.result);
+          const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+
+          let importedMembers = [];
+          let importedTransactions = [];
+
+          const getVal = (row, keys) => {
+            const rowKeys = Object.keys(row);
+            for (let k of rowKeys) {
+              const cleanKey = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+              for (let target of keys) {
+                if (cleanKey === target.toLowerCase().replace(/[^a-z0-9]/g, '')) {
+                  return row[k];
+                }
+              }
+            }
+            return null;
+          };
+
+          const parseExcelDate = (val) => {
+            if (!val) return todayStr;
+            if (val instanceof Date && !isNaN(val)) return val.toISOString().split('T')[0];
+            const str = String(val).trim();
+            const d = new Date(str);
+            if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+            return todayStr;
+          };
+
+          const membersSheetName = workbook.SheetNames.find(s => 
+            s.toLowerCase().includes('member')
+          ) || workbook.SheetNames[0];
+
+          if (membersSheetName) {
+            const rawMembers = XLSX.utils.sheet_to_json(workbook.Sheets[membersSheetName]);
+            importedMembers = rawMembers.map((row, idx) => {
+              const nameVal = getVal(row, ['name', 'fullname', 'member', 'membername', 'person']);
+              const rateVal = getVal(row, ['monthlyrate', 'rate', 'target', 'monthlytarget']);
+              const dateVal = getVal(row, ['startdate', 'date', 'joined', 'memberstartdate']);
+
+              return {
+                id: Number(getVal(row, ['id', 'memberid']) || idx + 1),
+                name: nameVal ? String(nameVal).trim() : '',
+                monthly_rate: rateVal ? Number(rateVal) : 5000,
+                start_date: parseExcelDate(dateVal)
+              };
+            }).filter(m => m.name !== '');
+          }
+
+          const txSheetName = workbook.SheetNames.find(s => 
+            s.toLowerCase().includes('transaction') || 
+            s.toLowerCase().includes('contribution') ||
+            s.toLowerCase().includes('payment')
+          );
+
+          if (txSheetName) {
+            const rawTx = XLSX.utils.sheet_to_json(workbook.Sheets[txSheetName]);
+            importedTransactions = rawTx.map(row => {
+              const memberIdVal = getVal(row, ['memberid', 'id']);
+              const memberNameVal = getVal(row, ['member', 'name', 'membername']);
+              const catVal = getVal(row, ['category', 'type']) || 'REGULAR';
+              const amtVal = getVal(row, ['amount', 'amountkes', 'paid', 'total']);
+              const noteVal = getVal(row, ['notes', 'ref', 'reference', 'description']);
+              const dateVal = getVal(row, ['date', 'txdate', 'transactiondate']);
+
+              let mId = memberIdVal ? Number(memberIdVal) : 0;
+              if (!mId && memberNameVal) {
+                const found = importedMembers.find(m => m.name.toLowerCase() === String(memberNameVal).toLowerCase());
+                if (found) mId = found.id;
+              }
+
+              return {
+                member_id: mId,
+                category: String(catVal).toUpperCase().includes('WITHDRAW') ? 'WITHDRAWAL' : (String(catVal).toUpperCase().includes('ADD') ? 'ADDITIONAL' : 'REGULAR'),
+                amount: Number(amtVal || 0),
+                notes: noteVal ? String(noteVal) : '',
+                date: parseExcelDate(dateVal)
+              };
+            }).filter(t => t.amount > 0);
+          }
+
+          if (importedMembers.length === 0) {
+            alert("No valid member records found in file.");
+            return;
+          }
+
+          if (confirm(`Parsed successfully!\n• Members found: ${importedMembers.length}\n• Transactions found: ${importedTransactions.length}\n\nOverwrite local database?`)) {
+            await db.members.clear();
+            await db.transactions.clear();
+
+            await db.members.bulkAdd(importedMembers);
+            if (importedTransactions.length > 0) {
+              await db.transactions.bulkAdd(importedTransactions);
+            }
+
+            refreshDashboard();
+            alert("Database updated successfully!");
+          }
+        } catch (err) {
+          alert("Error parsing Excel/CSV file.");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    // Refresh Dashboard Logic
+    async function refreshDashboard() {
+      const members = await db.members.toArray();
+      const transactions = await db.transactions.toArray();
+
+      reportMemberFilter.innerHTML = '<option value="ALL">All Transactions Statement</option><option value="GROUP_WITHDRAWAL">Group Withdrawals Only</option>';
+      members.forEach(m => {
+        reportMemberFilter.innerHTML += `<option value="${m.id}">${m.name}</option>`;
+      });
+
+      if (document.querySelectorAll('.batch-row').length === 0) {
+        batchRowsContainer.appendChild(createBatchRowElement(members));
+      } else {
+        document.querySelectorAll('.txMemberSelect').forEach(select => {
+          const currentVal = select.value;
+          select.innerHTML = '<option value="">-- Select Member --</option>';
+          members.forEach(m => {
+            select.innerHTML += `<option value="${m.id}">${m.name}</option>`;
+          });
+          select.value = currentVal;
+        });
+      }
+
+      let sumRegular = 0, sumAdditional = 0, sumArrears = 0, sumSurplus = 0;
+      
+      const sumWithdrawals = transactions
+        .filter(t => t.category === 'WITHDRAWAL' || t.member_id === 0)
+        .reduce((s, t) => s + Number(t.amount), 0);
+
+      ledgerTable.innerHTML = '';
+      memberCardsGrid.innerHTML = '';
+      memberCountBadge.textContent = `${members.length} Active Member(s)`;
+
+      if (members.length === 0) {
+        ledgerTable.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-slate-400">No members registered yet. Add a member above.</td></tr>`;
+        memberCardsGrid.innerHTML = `<div class="col-span-full text-center py-6 text-slate-400 text-xs">No individual member cards to display.</div>`;
+      }
+
+      for (const member of members) {
+        const memberTxs = transactions.filter(t => String(t.member_id) === String(member.id));
+        const regPaid = memberTxs.filter(t => t.category === 'REGULAR').reduce((s, t) => s + Number(t.amount), 0);
+        const addPaid = memberTxs.filter(t => t.category === 'ADDITIONAL').reduce((s, t) => s + Number(t.amount), 0);
+
+        const totalContributions = regPaid + addPaid;
+        const activeMonths = calculateMonthsElapsed(member.start_date);
+        const expectedTargetTotal = activeMonths * member.monthly_rate;
+
+        const monthsCovered = Math.floor(totalContributions / member.monthly_rate);
+        const balanceDelta = totalContributions - expectedTargetTotal;
+        const arrears = balanceDelta < 0 ? Math.abs(balanceDelta) : 0;
+        const surplus = balanceDelta > 0 ? balanceDelta : 0;
+
+        sumRegular += regPaid; sumAdditional += addPaid;
+        sumArrears += arrears; sumSurplus += surplus;
+
+        const statusBadgeHTML = arrears > 0 
+          ? `<span class="px-2 py-0.5 bg-rose-100 text-rose-800 rounded-full text-[10px] font-bold">Arrears: KES ${arrears.toLocaleString()}</span>`
+          : (surplus > 0 
+              ? `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded-full text-[10px] font-bold">Surplus: KES ${surplus.toLocaleString()}</span>`
+              : `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold">Up to Date</span>`);
+
+        memberCardsGrid.innerHTML += `
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 hover:shadow-sm transition">
+            <div class="flex justify-between items-start">
+              <div>
+                <div class="flex items-center gap-1.5">
+                  <h3 class="font-bold text-slate-800 text-sm">${member.name}</h3>
+                  <button onclick="openEditMemberModal('${member.id}')" class="text-slate-400 hover:text-slate-700 text-xs cursor-pointer" title="Edit Member Settings">⚙️</button>
+                </div>
+                <p class="text-[10px] text-slate-400">Start Date: <b class="text-slate-600">${member.start_date}</b></p>
+              </div>
+              ${statusBadgeHTML}
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-200">
+              <div>
+                <p class="text-[10px] font-semibold text-slate-400 uppercase">Total Paid</p>
+                <p class="font-bold text-slate-800 text-sm">KES ${totalContributions.toLocaleString()}</p>
+              </div>
+              <div>
+                <p class="text-[10px] font-semibold text-slate-400 uppercase">Coverage</p>
+                <p class="font-semibold text-slate-700 text-xs mt-0.5">${monthsCovered} / ${activeMonths} Month(s)</p>
+              </div>
+            </div>
+
+            <div class="flex justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-200">
+              <span>Reg: <b class="text-slate-700">KES ${regPaid.toLocaleString()}</b></span>
+              <span>Add: <b class="text-blue-600">KES ${addPaid.toLocaleString()}</b></span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200">
+              <button onclick="filterMemberStatement('${member.id}')" class="text-center text-[10px] font-semibold text-indigo-600 hover:text-indigo-800 underline">
+                Statement →
+              </button>
+              <button onclick="sendWhatsAppReceipt('${member.id}')" class="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold py-1 px-2 rounded flex items-center justify-center gap-1 transition cursor-pointer">
+                📱 WhatsApp Receipt
+              </button>
+            </div>
+          </div>
+        `;
+
+        ledgerTable.innerHTML += `
+          <tr class="hover:bg-slate-50">
+            <td class="p-4 font-semibold text-slate-800">${member.name}</td>
+            <td class="p-4 text-slate-500 font-medium">${member.start_date}</td>
+            <td class="p-4 font-medium text-slate-900">KES ${totalContributions.toLocaleString()}</td>
+            <td class="p-4 font-medium text-slate-700">${monthsCovered} / ${activeMonths} Month(s)</td>
+            <td class="p-4">${arrears > 0 ? `<span class="text-rose-600 font-semibold">KES ${arrears.toLocaleString()}</span>` : '<span class="text-slate-400">KES 0</span>'}</td>
+            <td class="p-4">${surplus > 0 ? `<span class="text-indigo-600 font-semibold">+ KES ${surplus.toLocaleString()}</span>` : '<span class="text-slate-400">KES 0</span>'}</td>
+            <td class="p-4 text-center">
+              <button onclick="openEditMemberModal('${member.id}')" class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold underline cursor-pointer">
+                ⚙️ Settings
+              </button>
+            </td>
+          </tr>
+        `;
+      }
+
+      document.getElementById('totalRegular').textContent = `KES ${sumRegular.toLocaleString()}`;
+      document.getElementById('totalAdditional').textContent = `KES ${sumAdditional.toLocaleString()}`;
+      document.getElementById('totalWithdrawals').textContent = `KES ${sumWithdrawals.toLocaleString()}`;
+      document.getElementById('netVault').textContent = `KES ${(sumRegular + sumAdditional - sumWithdrawals).toLocaleString()}`;
+      document.getElementById('totalArrears').textContent = `KES ${sumArrears.toLocaleString()}`;
+      document.getElementById('totalSurplus').textContent = `KES ${sumSurplus.toLocaleString()}`;
+
+      renderFilteredReport(members, transactions);
+    }
+
+    window.filterMemberStatement = function(memberId) {
+      reportMemberFilter.value = String(memberId);
+      refreshDashboard();
+      document.getElementById('printableReportArea').scrollIntoView({ behavior: 'smooth' });
+    };
+
+    function renderFilteredReport(members, transactions) {
+      const selectedScope = reportMemberFilter.value;
+      const startDate = reportStartDate.value;
+      const endDate = reportEndDate.value;
+
+      let filtered = [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      if (selectedScope === 'GROUP_WITHDRAWAL') {
+        filtered = filtered.filter(t => t.category === 'WITHDRAWAL' || t.member_id === 0);
+      } else if (selectedScope !== 'ALL') {
+        filtered = filtered.filter(t => String(t.member_id) === String(selectedScope));
+      }
+
+      if (startDate) filtered = filtered.filter(t => t.date >= startDate);
+      if (endDate) filtered = filtered.filter(t => t.date <= endDate);
+
+      reportTableBody.innerHTML = '';
+
+      if (filtered.length === 0) {
+        reportTableBody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400">No transaction records match the current filter.</td></tr>`;
+        return;
+      }
+
+      filtered.forEach(t => {
+        const isGroupWithdrawal = t.category === 'WITHDRAWAL' || t.member_id === 0;
+        const member = members.find(m => String(m.id) === String(t.member_id));
+        const displayName = isGroupWithdrawal ? 'CHAMA GROUP VAULT' : (member ? member.name : 'Unknown Member');
+
+        const whatsappBtnHTML = !isGroupWithdrawal && member 
+          ? `<button onclick="sendWhatsAppReceipt('${member.id}', '${t.id}')" class="text-emerald-700 hover:text-emerald-900 text-[10px] font-bold underline cursor-pointer">📱 Send Receipt</button>` 
+          : `-`;
+
+        reportTableBody.innerHTML += `
+          <tr class="hover:bg-slate-50">
+            <td class="p-3 text-slate-700 font-medium">${t.date}</td>
+            <td class="p-3 font-semibold ${isGroupWithdrawal ? 'text-amber-800' : 'text-slate-800'}">${displayName}</td>
+            <td class="p-3">
+              <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${isGroupWithdrawal ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">
+                ${t.category}
+              </span>
+            </td>
+            <td class="p-3 font-semibold ${isGroupWithdrawal ? 'text-amber-700' : 'text-slate-900'}">KES ${Number(t.amount).toLocaleString()}</td>
+            <td class="p-3 text-slate-500">${t.notes || '-'}</td>
+            <td class="p-3 text-center">${whatsappBtnHTML}</td>
+          </tr>
+        `;
+      });
+    }
+
+    // CSV & Print PDF
+    document.getElementById('exportCsvBtn').addEventListener('click', async () => {
+      const members = await db.members.toArray();
+      const transactions = await db.transactions.toArray();
+      const selectedScope = reportMemberFilter.value;
+
+      let filtered = [...transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
+      if (selectedScope === 'GROUP_WITHDRAWAL') {
+        filtered = filtered.filter(t => t.category === 'WITHDRAWAL' || t.member_id === 0);
+      } else if (selectedScope !== 'ALL') {
+        filtered = filtered.filter(t => String(t.member_id) === String(selectedScope));
+      }
+
+      let csvContent = "data:text/csv;charset=utf-8,Transaction Date,Entity / Member Name,Category,Amount (KES),Notes\n";
+      filtered.forEach(t => {
+        const isGroupWithdrawal = t.category === 'WITHDRAWAL' || t.member_id === 0;
+        const member = members.find(m => String(m.id) === String(t.member_id));
+        const displayName = isGroupWithdrawal ? 'CHAMA GROUP VAULT' : (member ? member.name : '');
+        csvContent += `"${t.date}","${displayName}","${t.category}",${t.amount},"${t.notes || ''}"\n`;
+      });
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `Chama_Report_${todayStr}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+
+    document.getElementById('printReportBtn').addEventListener('click', () => {
+      const header = document.getElementById('reportPrintHeader');
+      const sub = document.getElementById('reportPrintSub');
+      sub.textContent = `Generated on ${new Date().toLocaleDateString()} | Filter: ${reportMemberFilter.options[reportMemberFilter.selectedIndex].text}`;
+      
+      header.classList.remove('hidden');
+      window.print();
+      header.classList.add('hidden');
+    });
+
+    // JSON Export & Import
+    document.getElementById('exportJsonBtn').addEventListener('click', async () => {
+      const members = await db.members.toArray();
+      const transactions = await db.transactions.toArray();
+
+      const backupData = {
+        appName: "ChamaTrackerBackup",
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        data: { members, transactions }
+      };
+
+      const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(backupData, null, 2))}`;
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", jsonString);
+      downloadAnchor.setAttribute("download", `Chama_Database_Backup_${todayStr}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    });
+
+    document.getElementById('importJsonInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const backupObj = JSON.parse(event.target.result);
+          if (!backupObj.data || !backupObj.data.members || !backupObj.data.transactions) {
+            alert("Invalid backup file structure.");
+            return;
+          }
+
+          if (confirm("Importing this JSON file will overwrite your local database. Continue?")) {
+            await db.members.clear();
+            await db.transactions.clear();
+
+            await db.members.bulkAdd(backupObj.data.members);
+            await db.transactions.bulkAdd(backupObj.data.transactions);
+
+            refreshDashboard();
+            alert("Database successfully restored from JSON backup!");
+          }
+        } catch (err) {
+          alert("Failed to parse JSON file.");
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    // Form Submissions
+    [reportMemberFilter, reportStartDate, reportEndDate].forEach(el => {
+      el.addEventListener('change', refreshDashboard);
+    });
+
+    memberForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('memberName').value.trim();
+      const monthly_rate = Number(document.getElementById('memberRate').value);
+      const start_date = document.getElementById('memberStartDate').value;
+      if (name && start_date) {
+        await db.members.add({ name, monthly_rate, start_date });
+        document.getElementById('memberName').value = '';
+        refreshDashboard();
+      }
+    });
+
+    groupWithdrawalForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const date = document.getElementById('groupWithdrawDate').value;
+      const amount = Number(document.getElementById('groupWithdrawAmount').value);
+      const notes = document.getElementById('groupWithdrawNotes').value.trim();
+
+      if (amount && date) {
+        await db.transactions.add({
+          member_id: 0,
+          category: 'WITHDRAWAL',
+          amount,
+          notes,
+          date
+        });
+        document.getElementById('groupWithdrawAmount').value = '';
+        document.getElementById('groupWithdrawNotes').value = '';
+        refreshDashboard();
+        alert(`Recorded group withdrawal of KES ${amount.toLocaleString()}!`);
+      }
+    });
+
+    batchTransactionForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const txDate = document.getElementById('batchTxDate').value;
+      const rowElements = document.querySelectorAll('.batch-row');
+      
+      const transactionsToSave = [];
+      rowElements.forEach(row => {
+        const member_id = Number(row.querySelector('.txMemberSelect').value);
+        const category = row.querySelector('.txCategorySelect').value;
+        const amount = Number(row.querySelector('.txAmountInput').value);
+
+        if (member_id && amount) {
+          transactionsToSave.push({ member_id, category, amount, notes: '', date: txDate });
+        }
+      });
+
+      if (transactionsToSave.length > 0) {
+        await db.transactions.bulkAdd(transactionsToSave);
+        
+        const members = await db.members.toArray();
+        batchRowsContainer.innerHTML = '';
+        batchRowsContainer.appendChild(createBatchRowElement(members));
+        
+        refreshDashboard();
+        alert(`Saved ${transactionsToSave.length} contribution(s) for ${txDate}!`);
+      }
+    });
+
+    document.getElementById('clearDbBtn').addEventListener('click', async () => {
+      if (confirm('Are you sure you want to clear all local records?')) {
+        await db.members.clear();
+        await db.transactions.clear();
+        refreshDashboard();
+      }
+    });
+
+    refreshDashboard();
+  </script>
+</body>
+</html>
