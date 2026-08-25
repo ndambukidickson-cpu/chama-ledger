@@ -1,4 +1,4 @@
-const CACHE_NAME = 'chama-ledger-v1';
+const CACHE_NAME = 'chama-ledger-v2'; // Changed version forces cache refresh
 const ASSETS = [
   './',
   './index.html',
@@ -9,16 +9,39 @@ const ASSETS = [
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
 ];
 
-// Install Service Worker and cache app assets
+// Install new version and immediately force skip waiting
 self.addEventListener('install', (e) => {
+  self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(ASSETS);
     })
   );
-  self.skipWaiting();
 });
 
+// Take control of active clients immediately and clear old caches
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
+    caches.keys().then((keys) => {
+      return Promise.all(
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
+  );
+});
+
+// Serve assets from cache, fallback to network
+self.addEventListener('fetch', (e) => {
+  e.respondWith(
+    caches.match(e.request).then((response) => {
+      return response || fetch(e.request);
+    })
+  );
+});
 // Serve cached assets when offline
 self.addEventListener('fetch', (e) => {
   e.respondWith(
