@@ -42,11 +42,3 @@ self.addEventListener('fetch', (e) => {
     })
   );
 });
-// Serve cached assets when offline
-self.addEventListener('fetch', (e) => {
-  e.respondWith(
-    caches.match(e.request).then((response) => {
-      return response || fetch(e.request);
-    })
-  );
-});
