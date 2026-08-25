@@ -1,25 +1,10 @@
-const CACHE_NAME = 'chama-ledger-v2'; // Changed version forces cache refresh
-const ASSETS = [
-  './',
-  './index.html',
-  './manifest.json',
-  'https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4',
-  'https://cdnjs.cloudflare.com/ajax/libs/dexie/3.2.4/dexie.min.js',
-  'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
-];
+const CACHE_NAME = 'chama-ledger-v3';
 
-// Install new version and immediately force skip waiting
+// Install new version and force activation immediately
 self.addEventListener('install', (e) => {
   self.skipWaiting();
-  e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS);
-    })
-  );
 });
 
-// Take control of active clients immediately and clear old caches
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) => {
@@ -34,11 +19,21 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// Serve assets from cache, fallback to network
+// NETWORK-FIRST STRATEGY: Fetch live updates first, fall back to offline cache
 self.addEventListener('fetch', (e) => {
+  // Ignore non-GET requests or browser extension requests
+  if (e.request.method !== 'GET') return;
+
   e.respondWith(
-    caches.match(e.request).then((response) => {
-      return response || fetch(e.request);
-    })
+    fetch(e.request)
+      .then((response) => {
+        // Clone response and update cache dynamically in the background
+        const resClone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(e.request, resClone);
+        });
+        return response;
+      })
+      .catch(() => caches.match(e.request)) // If offline, serve cached copy
   );
 });
