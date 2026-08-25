@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chama Ledger System - Complete Offline App</title>
+  <title>Chama Ledger System - Real-time PWA</title>
   
   <!-- PWA Manifest & Mobile Meta Tags -->
   <link rel="manifest" href="manifest.json">
@@ -28,10 +28,10 @@
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200 gap-4">
       <div>
         <h1 class="text-2xl font-bold text-slate-800">Chama Ledger System</h1>
-        <p class="text-sm text-slate-500">Offline PWA app, adjustable member start dates, group withdrawals, WhatsApp receipts, and financial reporting.</p>
+        <p class="text-sm text-slate-500">Live updating PWA, editable contributions, adjustable start dates & WhatsApp receipts.</p>
       </div>
       <div id="statusBadge" class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
-        ● Online
+        ● Live Network Connected
       </div>
     </div>
 
@@ -211,12 +211,12 @@
 
     </div>
 
-    <!-- Report Generator Section -->
+    <!-- Report Generator & Contribution Audit Section -->
     <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
       <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 class="text-lg font-bold text-slate-800">Generate Contributions & Audit Report</h2>
-          <p class="text-xs text-slate-500">Filter contribution statements by individual member, group withdrawals, or date range</p>
+          <p class="text-xs text-slate-500">Filter contribution statements, edit logged payments, or send WhatsApp receipts</p>
         </div>
         <div class="flex gap-2">
           <button id="exportCsvBtn" type="button" class="bg-slate-800 hover:bg-slate-900 text-white text-xs px-3 py-2 rounded-lg font-semibold transition cursor-pointer">Export to Excel (CSV)</button>
@@ -258,7 +258,7 @@
               <th class="p-3">Category</th>
               <th class="p-3">Amount</th>
               <th class="p-3">Reference / Notes</th>
-              <th class="p-3 text-center">Action</th>
+              <th class="p-3 text-center">Manage / Receipt</th>
             </tr>
           </thead>
           <tbody id="reportTableBody" class="divide-y divide-slate-100 text-xs">
@@ -315,7 +315,7 @@
         <div>
           <label class="block text-xs font-semibold text-slate-600 mb-1">Member Start Date</label>
           <input type="date" id="editMemberStartDate" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-slate-800 outline-none bg-amber-50">
-          <p class="text-[11px] text-slate-500 mt-1">Adjusting this date alters the total active months and recalculates arrears/surplus.</p>
+          <p class="text-[11px] text-slate-500 mt-1">Adjusting this date alters total active months and recalculates arrears/surplus.</p>
         </div>
 
         <div>
@@ -336,13 +336,69 @@
     </div>
   </div>
 
+  <!-- EDIT TRANSACTION / CONTRIBUTION MODAL -->
+  <div id="editTxModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-white rounded-xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h3 class="font-bold text-slate-800 text-base">Edit Contribution / Transaction</h3>
+        <button id="closeTxModalBtn" type="button" class="text-slate-400 hover:text-slate-600 text-lg font-bold cursor-pointer">✕</button>
+      </div>
+
+      <form id="editTxForm" class="space-y-4">
+        <input type="hidden" id="editTxId">
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Transaction Date</label>
+          <input type="date" id="editTxDate" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-slate-800 outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Category</label>
+          <select id="editTxCategory" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white outline-none">
+            <option value="REGULAR">Regular Share</option>
+            <option value="ADDITIONAL">Additional / Extra</option>
+            <option value="WITHDRAWAL">Group Withdrawal</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Amount (KES)</label>
+          <input type="number" id="editTxAmount" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-slate-800 outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Notes / Reference</label>
+          <input type="text" id="editTxNotes" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-slate-800 outline-none">
+        </div>
+
+        <div class="flex justify-between items-center pt-3 border-t border-slate-100 gap-2">
+          <button type="button" id="deleteTxBtn" class="text-rose-600 hover:text-rose-800 text-xs font-bold underline cursor-pointer">
+            Delete Record
+          </button>
+          <div class="flex gap-2">
+            <button type="button" id="cancelTxModalBtn" class="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50 cursor-pointer">Cancel</button>
+            <button type="submit" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold cursor-pointer">Update Payment</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
-    // Register Service Worker for PWA Installation
+    // Register Service Worker with Dynamic Auto-Reload Logic
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-          .then(reg => console.log('PWA Service Worker registered.', reg.scope))
-          .catch(err => console.log('Service Worker failed:', err));
+        navigator.serviceWorker.register('./sw.js').then(reg => {
+          reg.update(); // Fetch newest sw.js version automatically
+        });
+      });
+
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
       });
     }
 
@@ -379,7 +435,7 @@
     const reportEndDate = document.getElementById('reportEndDate');
     const reportTableBody = document.getElementById('reportTableBody');
 
-    // Modal elements
+    // Member Settings Modal elements
     const editMemberModal = document.getElementById('editMemberModal');
     const editMemberForm = document.getElementById('editMemberForm');
     const editMemberId = document.getElementById('editMemberId');
@@ -387,10 +443,19 @@
     const editMemberStartDate = document.getElementById('editMemberStartDate');
     const editMemberRate = document.getElementById('editMemberRate');
 
+    // Transaction Edit Modal elements
+    const editTxModal = document.getElementById('editTxModal');
+    const editTxForm = document.getElementById('editTxForm');
+    const editTxId = document.getElementById('editTxId');
+    const editTxDate = document.getElementById('editTxDate');
+    const editTxCategory = document.getElementById('editTxCategory');
+    const editTxAmount = document.getElementById('editTxAmount');
+    const editTxNotes = document.getElementById('editTxNotes');
+
     function checkConnection() {
       if (navigator.onLine) {
         statusBadge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800";
-        statusBadge.textContent = "● Online";
+        statusBadge.textContent = "● Live Network Connected";
       } else {
         statusBadge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800";
         statusBadge.textContent = "● Offline Mode Active";
@@ -515,6 +580,7 @@
 
     function closeModal() {
       editMemberModal.classList.add('hidden');
+      editTxModal.classList.add('hidden');
     }
 
     document.getElementById('closeModalBtn').addEventListener('click', closeModal);
@@ -538,8 +604,51 @@
       const id = Number(editMemberId.value);
       if (!id) return;
 
-      if (confirm("Are you sure you want to delete this member? Their transaction history will remain in the database logs.")) {
+      if (confirm("Are you sure you want to delete this member? Their contribution log will remain in records.")) {
         await db.members.delete(id);
+        closeModal();
+        refreshDashboard();
+      }
+    });
+
+    // TRANSACTION / CONTRIBUTION EDIT HANDLERS
+    window.openEditTxModal = async function(txId) {
+      const tx = await db.transactions.get(Number(txId));
+      if (!tx) return;
+
+      editTxId.value = tx.id;
+      editTxDate.value = tx.date;
+      editTxCategory.value = tx.category;
+      editTxAmount.value = tx.amount;
+      editTxNotes.value = tx.notes || '';
+
+      editTxModal.classList.remove('hidden');
+    };
+
+    document.getElementById('closeTxModalBtn').addEventListener('click', closeModal);
+    document.getElementById('cancelTxModalBtn').addEventListener('click', closeModal);
+
+    editTxForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = Number(editTxId.value);
+      const date = editTxDate.value;
+      const category = editTxCategory.value;
+      const amount = Number(editTxAmount.value);
+      const notes = editTxNotes.value.trim();
+
+      if (id && date && amount) {
+        await db.transactions.update(id, { date, category, amount, notes });
+        closeModal();
+        refreshDashboard();
+      }
+    });
+
+    document.getElementById('deleteTxBtn').addEventListener('click', async () => {
+      const id = Number(editTxId.value);
+      if (!id) return;
+
+      if (confirm("Are you sure you want to delete this transaction record?")) {
+        await db.transactions.delete(id);
         closeModal();
         refreshDashboard();
       }
@@ -879,7 +988,7 @@
         const displayName = isGroupWithdrawal ? 'CHAMA GROUP VAULT' : (member ? member.name : 'Unknown Member');
 
         const whatsappBtnHTML = !isGroupWithdrawal && member 
-          ? `<button onclick="sendWhatsAppReceipt('${member.id}', '${t.id}')" class="text-emerald-700 hover:text-emerald-900 text-[10px] font-bold underline cursor-pointer">📱 Send Receipt</button>` 
+          ? `<button onclick="sendWhatsAppReceipt('${member.id}', '${t.id}')" class="text-emerald-700 hover:text-emerald-900 text-[10px] font-bold underline cursor-pointer">📱 Receipt</button>` 
           : `-`;
 
         reportTableBody.innerHTML += `
@@ -893,7 +1002,10 @@
             </td>
             <td class="p-3 font-semibold ${isGroupWithdrawal ? 'text-amber-700' : 'text-slate-900'}">KES ${Number(t.amount).toLocaleString()}</td>
             <td class="p-3 text-slate-500">${t.notes || '-'}</td>
-            <td class="p-3 text-center">${whatsappBtnHTML}</td>
+            <td class="p-3 text-center space-x-2">
+              <button onclick="openEditTxModal('${t.id}')" class="text-indigo-600 hover:text-indigo-800 text-[10px] font-bold underline cursor-pointer">✏️ Edit</button>
+              ${whatsappBtnHTML}
+            </td>
           </tr>
         `;
       });
